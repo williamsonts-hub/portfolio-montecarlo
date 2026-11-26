@@ -1,0 +1,11 @@
+{
+  "name": "portfolio-montecarlo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monte Carlo tool to test asset allocations against a CPI + 4% objective",
+  "scripts": {
+    "test": "node test/engine.test.js",
+    "start": "python3 -m http.server 8000"
+  },
+  "license": "UNLICENSED"
+}
