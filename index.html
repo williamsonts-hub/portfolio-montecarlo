@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portfolio Monte Carlo</title>
+<meta name="description" content="Test asset allocations against a CPI + 4% objective with Monte Carlo simulation.">
+<link rel="stylesheet" href="css/style.css">
+<script src="js/vendor/chart-4.4.1.umd.js"></script>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>Portfolio Monte Carlo</h1>
+    <p class="sub">Test starting allocations against an objective of US CPI + <span id="hdrSpread">4.0</span>% a year.</p>
+  </div>
+  <div class="top-actions">
+    <button id="runBtn" class="primary">Run simulation</button>
+    <span id="status" class="status" role="status" aria-live="polite"></span>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- ===================== INPUTS ===================== -->
+  <section class="inputs" aria-label="Inputs">
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Allocation and asset assumptions</h2>
+        <label class="inline">Preset
+          <select id="preset"><option value="">Choose…</option></select>
+        </label>
+      </div>
+      <div class="table-wrap">
+        <table class="grid" id="assetTable">
+          <thead><tr><th>Asset class</th><th>Weight %</th><th>Return % p.a.</th><th>Volatility %</th></tr></thead>
+          <tbody></tbody>
+          <tfoot><tr><th>Total</th><th id="wTotal">0</th><th colspan="2" id="analytic" class="muted"></th></tr></tfoot>
+        </table>
+      </div>
+      <p class="hint">Returns are compound (geometric) nominal returns, net of fees. Volatility is the annual standard deviation of returns; private assets use de-smoothed figures.</p>
+      <div class="row-btns">
+        <button id="normaliseBtn">Scale weights to 100%</button>
+        <button id="resetAssetsBtn">Reset assumptions</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Inflation and objective</h2>
+      <div class="fields">
+        <label>CPI long-run mean % p.a.<input type="number" step="0.1" id="cpiMean"></label>
+        <label>CPI volatility % p.a.<input type="number" step="0.1" min="0" id="cpiVol"></label>
+        <label>CPI persistence (0 to 0.99)<input type="number" step="0.05" min="0" max="0.99" id="cpiPers"></label>
+        <label>Starting inflation % p.a.<input type="number" step="0.1" id="cpiStart"></label>
+        <label>Objective: CPI + % p.a.<input type="number" step="0.25" id="spread"></label>
+      </div>
+      <p class="hint">Inflation is mean-reverting: persistence is the share of this year's gap from the long-run mean that carries into next year. Inflation uses the same distribution as the assets.</p>
+    </div>
+
+    <div class="card">
+      <h2>Model settings</h2>
+      <div class="fields">
+        <fieldset class="seg"><legend>Return distribution</legend>
+          <label><input type="radio" name="dist" value="lognormal"> Lognormal</label>
+          <label><input type="radio" name="dist" value="fat"> Fat tails (Student-t)</label>
+        </fieldset>
+        <label class="fat-only">Degrees of freedom (lower = fatter)<input type="number" step="1" min="3" id="df"></label>
+        <label class="fat-only">Tail event length (months)<input type="number" step="1" min="1" max="60" id="tailMonths"></label>
+        <label>Rebalancing
+          <select id="rebalance">
+            <option value="none">None (buy and hold)</option>
+            <option value="monthly">Monthly</option>
+            <option value="quarterly">Quarterly</option>
+            <option value="annual">Annually</option>
+          </select>
+        </label>
+        <label>Horizons (years, comma separated)<input type="text" id="horizons"></label>
+        <label>Number of paths<input type="number" step="1000" min="100" max="50000" id="paths"></label>
+        <label>Random seed<input type="number" step="1" id="seed"></label>
+      </div>
+      <p class="hint">Lognormal: normally distributed log returns. Fat tails: a multivariate Student-t with the same volatility, where extreme years are more common and hit all assets together. Keeping the seed fixed makes comparisons between allocations use the same random scenarios.</p>
+    </div>
+
+    <details class="card" id="corrCard">
+      <summary><h2>Correlations</h2> <span id="corrStatus" class="pill"></span></summary>
+      <p class="hint">Edit any cell; the matching cell is updated automatically. The last row and column are the CPI inflation surprise.</p>
+      <div class="table-wrap"><table class="corr" id="corrTable"></table></div>
+      <div class="row-btns">
+        <button id="fixCorrBtn">Fix matrix</button>
+        <button id="resetCorrBtn">Reset correlations</button>
+      </div>
+    </details>
+
+    <div class="card">
+      <h2>Settings file</h2>
+      <div class="row-btns">
+        <button id="exportBtn">Download settings</button>
+        <label class="button-like">Load settings<input type="file" id="importFile" accept="application/json" hidden></label>
+        <button id="resetAllBtn">Reset everything</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== RESULTS ===================== -->
+  <section class="results" aria-label="Results">
+    <div id="errors" class="errors" hidden></div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Summary by horizon</h2>
+        <label class="inline">Drawdowns measured in
+          <select id="ddBasis"><option value="nominal">Nominal terms</option><option value="real">Real terms</option></select>
+        </label>
+      </div>
+      <div id="tiles" class="tiles"></div>
+      <div class="table-wrap"><table class="grid stats" id="summaryTable"></table></div>
+      <p class="hint">Annualised returns are compound returns over the whole horizon. "Beats objective" means real wealth at the end of the horizon is above what CPI + the spread would have delivered. Max drawdown is the worst peak-to-trough fall within the horizon, using month-end values; time to recover is months from that trough back to the previous peak.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Projected portfolio value</h2>
+        <label class="inline">Show
+          <select id="fanBasis"><option value="real">Real (after inflation)</option><option value="nominal">Nominal</option></select>
+        </label>
+      </div>
+      <div class="chart-box tall"><canvas id="fanChart" aria-label="Fan chart of projected portfolio value"></canvas></div>
+      <p class="hint">Starting value 1. Shaded bands show the 5th to 95th and 25th to 75th percentiles; the line is the median. The dashed line is the objective path.</p>
+    </div>
+
+    <div class="card">
+      <h2>How often the portfolio beats CPI + <span class="spreadTxt">4</span>%</h2>
+      <div class="chart-box"><canvas id="beatChart" aria-label="Probability of beating the objective by year"></canvas></div>
+      <p class="hint">Share of scenarios where cumulative real wealth is above the objective at each year end. Saved comparisons are shown alongside.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Distributions</h2>
+        <label class="inline">Horizon <select id="histHorizon"></select></label>
+      </div>
+      <div class="hist-grid">
+        <div><h3>Annualised return vs objective</h3><div class="chart-box"><canvas id="excessChart"></canvas></div></div>
+        <div><h3>Max drawdown</h3><div class="chart-box"><canvas id="mddChart"></canvas></div></div>
+        <div><h3>Time to recover from max drawdown</h3><div class="chart-box"><canvas id="recChart"></canvas></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Compare allocations</h2>
+        <div class="inline">
+          <input type="text" id="saveName" placeholder="Name this run" aria-label="Name for saved run">
+          <button id="saveBtn">Save current run</button>
+          <button id="clearCompareBtn">Clear all</button>
+        </div>
+      </div>
+      <div class="table-wrap"><table class="grid stats" id="compareTable"></table></div>
+      <p class="hint" id="compareHint">Save runs to compare them side by side. Saved runs are stored in this browser only.</p>
+    </div>
+
+    <p class="foot">Not modelled: fees beyond net-of-fee private returns, private equity capital calls and distributions, illiquidity, withdrawals, taxes and currency. Results are only as good as the assumptions; this is a planning tool, not a forecast.</p>
+  </section>
+</main>
+
+<script src="js/defaults.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
