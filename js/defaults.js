@@ -39,6 +39,7 @@
   };
 
   const PRESETS = {
+    'Current':                    [54, 9, 8, 2, 11, 3, 0, 0, 13],
     '60/40 equity / bonds':       [60, 0, 0, 0, 0, 0, 0, 40, 0],
     'Diversified with privates':  [35, 10, 5, 5, 5, 10, 10, 15, 5],
     'Endowment style':            [30, 15, 10, 10, 5, 10, 5, 10, 5],
