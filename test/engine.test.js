@@ -159,6 +159,41 @@ test('invalid inputs are rejected with clear messages', () => {
   assert.ok(fixed.every((r, i) => Math.abs(r[i] - 1) < 1e-12));
 });
 
+test('annual distribution: deterministic case pays out the right amounts', () => {
+  // No volatility anywhere: 5% a year, 2% inflation, 2.5% paid out each year end.
+  const assets = DEFAULTS.assets.map(a => ({ ...a, ret: 0.05, vol: 0 }));
+  const c = cfg({ assets, cpi: { mean: 0.02, vol: 0, persistence: 0, start: 0.02 }, horizons: [10], paths: 100, payoutRate: 0.025 });
+  const res = E.simulate(c), hz = res.horizons[0];
+  near(res.nominal[10 * 12], Math.pow(1.05 * 0.975, 10), 1e-5, 'value after 10 years');
+  near(res.nominal[12], 1.05 * 0.975, 1e-6, 'value after the first payout');
+  near(res.nominal[11], Math.pow(1.05, 11 / 12), 1e-6, 'no payout before the year end');
+  let paid = 0, paidReal = 0, W = 1;
+  for (let y = 1; y <= 10; y++) { W *= 1.05; paid += W * 0.025; paidReal += W * 0.025 / Math.pow(1.02, y); W *= 0.975; }
+  near(hz.paidNominal[0], paid, 1e-5, 'cumulative nominal distributions');
+  near(hz.paidReal[0], paidReal, 1e-5, 'cumulative real distributions');
+  near(hz.annNominal[0], 1.05 * 0.975 - 1, 1e-6, 'annualised growth in value after distributions');
+});
+
+test('annual distribution: scales every path by (1 - rate) per year; off or 0% changes nothing', () => {
+  const off = E.simulate(cfg({ horizons: [10], paths: 500 }));
+  const zero = E.simulate(cfg({ horizons: [10], paths: 500, payoutRate: 0 }));
+  assert.deepStrictEqual(Array.from(zero.nominal), Array.from(off.nominal));
+  for (const rebalance of ['annual', 'none']) {
+    const a = E.simulate(cfg({ horizons: [10], paths: 500, rebalance }));
+    const b = E.simulate(cfg({ horizons: [10], paths: 500, rebalance, payoutRate: 0.04 }));
+    const T1 = a.T + 1;
+    for (const p of [0, 123, 499]) {
+      near(b.nominal[p * T1 + 120] / a.nominal[p * T1 + 120], Math.pow(0.96, 10), 1e-5, `path ${p} (${rebalance})`);
+      near(b.nominal[p * T1 + 11] / a.nominal[p * T1 + 11], 1, 1e-6, `path ${p} before first payout`);
+    }
+    const sa = E.summarise(a)[0], sb = E.summarise(b)[0];
+    assert.ok(sb.probBeat < sa.probBeat, 'paying out makes the objective harder to beat');
+    assert.ok(sb.paid.nominalP50 > 0.3 && sa.paid.nominalP50 === 0, `paid ${sb.paid.nominalP50}`);
+  }
+  assert.ok(E.validate(cfg({ payoutRate: 0.3 })).some(e => e.includes('Annual distribution')));
+  assert.ok(E.validate(cfg({ payoutRate: -0.01 })).some(e => e.includes('Annual distribution')));
+});
+
 test('same seed gives identical results', () => {
   const a = E.summarise(E.simulate(cfg({ paths: 500 })));
   const b = E.summarise(E.simulate(cfg({ paths: 500 })));

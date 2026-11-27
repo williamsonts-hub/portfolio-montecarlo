@@ -21,6 +21,11 @@
  *    coefficient and shock size are solved so that *annual* inflation has the
  *    entered mean, volatility and year-on-year persistence.
  *  - Rebalancing back to target weights monthly, quarterly, annually or never.
+ *  - Optional annual distribution (`payoutRate`, e.g. 0.025): at each year end
+ *    that share of the portfolio's current value is paid out, pro rata across
+ *    holdings. Every value-based result (returns, objective, drawdowns, fan
+ *    chart) is then measured on the value left after distributions; the
+ *    amount paid out is tracked separately.
  */
 (function (root) {
   'use strict';
@@ -203,6 +208,7 @@
     if (cfg.distribution === 'fat' && !(cfg.df > 2)) errors.push('Degrees of freedom must be above 2.');
     if (cfg.distribution === 'fat' && cfg.tailMonths !== undefined && !(cfg.tailMonths >= 1 && cfg.tailMonths <= 60)) errors.push('Tail event length must be between 1 and 60 months.');
     if (!cfg.horizons.length || cfg.horizons.some(h => !(h >= 1 && h <= 50 && Number.isInteger(h)))) errors.push('Horizons must be whole years between 1 and 50.');
+    if (cfg.payoutRate !== undefined && !(cfg.payoutRate >= 0 && cfg.payoutRate <= 0.25)) errors.push('Annual distribution must be between 0% and 25%.');
     if (!(cfg.paths >= 100 && cfg.paths <= 50000)) errors.push('Number of paths must be between 100 and 50,000.');
     const C = cfg.corr;
     if (C.length !== n + 1) errors.push('Correlation matrix has the wrong size.');
@@ -230,6 +236,7 @@
     const tailBlock = Math.max(1, Math.round(cfg.tailMonths || 12)); // months a tail "regime" lasts
     const rebal = REBAL_MONTHS[cfg.rebalance] || 0;
     const spread = cfg.objectiveSpread;
+    const payout = cfg.payoutRate || 0, keep = 1 - payout;
     const horizonMonths = new Map(cfg.horizons.map((h, k) => [h * 12, k]));
 
     const nominal = new Float32Array(N * T1), real = new Float32Array(N * T1);
@@ -240,6 +247,7 @@
       annCpi: new Float64Array(N), beat: new Uint8Array(N),
       mddNominal: new Float64Array(N), mddReal: new Float64Array(N),
       recNominal: new Float64Array(N), recReal: new Float64Array(N), // months trough->recovery, -1 if not recovered
+      paidNominal: new Float64Array(N), paidReal: new Float64Array(N), // cumulative distributions, start value = 1
     }));
 
     const eps = new Float64Array(nV), z = new Float64Array(nV), h = new Float64Array(nA);
@@ -247,7 +255,7 @@
 
     for (let p = 0; p < N; p++) {
       for (let i = 0; i < nA; i++) h[i] = w[i];
-      let W = 1, logI = 0, pi = cp.start;
+      let W = 1, logI = 0, pi = cp.start, paidN = 0, paidR = 0;
       const base = p * T1;
       nominal[base] = 1; real[base] = 1;
       resetDD(ddN); resetDD(ddR);
@@ -265,6 +273,12 @@
         for (let i = 0; i < nA; i++) { h[i] *= Math.exp(mu[i] + sd[i] * z[i]); W += h[i]; }
         pi = cp.mean + cp.phi * (pi - cp.mean) + cp.shockSd * z[nA];
         logI += pi;
+        if (payout && t % 12 === 0) {
+          const d = W * payout;
+          paidN += d; paidR += d / Math.exp(logI);
+          for (let i = 0; i < nA; i++) h[i] *= keep;
+          W -= d;
+        }
         if (rebal && t % rebal === 0) for (let i = 0; i < nA; i++) h[i] = W * w[i];
         const R = W / Math.exp(logI);
         nominal[base + t] = W; real[base + t] = R;
@@ -282,6 +296,7 @@
           hz.annExcess[p] = Math.pow(R / Math.pow(1 + spread, yrs), 1 / yrs) - 1;
           hz.beat[p] = R > Math.pow(1 + spread, yrs) ? 1 : 0;
           hz.mddNominal[p] = ddN.maxDD; hz.recNominal[p] = ddN.maxRec;
+          hz.paidNominal[p] = paidN; hz.paidReal[p] = paidR;
           hz.mddReal[p] = ddR.maxDD; hz.recReal[p] = ddR.maxRec;
         }
       }
@@ -332,6 +347,7 @@
         real: { p5: quantile(rl, 0.05), p50: quantile(rl, 0.5), p95: quantile(rl, 0.95) },
         excess: { p5: quantile(ex, 0.05), p50: quantile(ex, 0.5), p95: quantile(ex, 0.95) },
         cpi: { p50: quantile(sortedCopy(hz.annCpi), 0.5) },
+        paid: { nominalP50: quantile(sortedCopy(hz.paidNominal), 0.5), realP50: quantile(sortedCopy(hz.paidReal), 0.5) },
         mdd: { p50: quantile(mdd, 0.5), p95: quantile(mdd, 0.95), mean: mean(mdd) },
         recovery: {
           p50Months: quantile(recovered, 0.5), p95Months: quantile(recovered, 0.95),

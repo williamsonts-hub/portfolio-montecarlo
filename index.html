@@ -74,11 +74,15 @@
             <option value="annual">Annually</option>
           </select>
         </label>
+        <fieldset class="seg"><legend>Annual distribution</legend>
+          <label><input type="checkbox" id="payoutOn"> Pay out a share of the portfolio each year</label>
+          <label class="inline payout-only">Distribution % of value p.a.<input type="number" step="0.25" min="0" max="25" id="payoutRate" style="width:80px"></label>
+        </fieldset>
         <label>Horizons (years, comma separated)<input type="text" id="horizons"></label>
         <label>Number of paths<input type="number" step="1000" min="100" max="50000" id="paths"></label>
         <label>Random seed<input type="number" step="1" id="seed"></label>
       </div>
-      <p class="hint">Lognormal: normally distributed log returns. Fat tails: a multivariate Student-t with the same volatility, where extreme years are more common and hit all assets together. Keeping the seed fixed makes comparisons between allocations use the same random scenarios.</p>
+      <p class="hint">Lognormal: normally distributed log returns. Fat tails: a multivariate Student-t with the same volatility, where extreme years are more common and hit all assets together. Annual distribution: at each year end, that percentage of the portfolio's value at the time is paid out. When it is on, every result below is measured on the value left after distributions. Keeping the seed fixed makes comparisons between allocations use the same random scenarios.</p>
     </div>
 
     <details class="card" id="corrCard">
@@ -114,7 +118,7 @@
       </div>
       <div id="tiles" class="tiles"></div>
       <div class="table-wrap"><table class="grid stats" id="summaryTable"></table></div>
-      <p class="hint">Annualised returns are compound returns over the whole horizon. "Beats objective" means real wealth at the end of the horizon is above what CPI + the spread would have delivered. Max drawdown is the worst peak-to-trough fall within the horizon, using month-end values; time to recover is months from that trough back to the previous peak.</p>
+      <p class="hint">Annualised returns are compound returns over the whole horizon. With the annual distribution on, returns, the objective test and drawdowns all use the portfolio's value after distributions. "Beats objective" means real wealth at the end of the horizon is above what CPI + the spread would have delivered. Max drawdown is the worst peak-to-trough fall within the horizon, using month-end values; time to recover is months from that trough back to the previous peak.</p>
     </div>
 
     <div class="card">
@@ -159,7 +163,7 @@
       <p class="hint" id="compareHint">Save runs to compare them side by side. Saved runs are stored in this browser only.</p>
     </div>
 
-    <p class="foot">Not modelled: fees beyond net-of-fee private returns, private equity capital calls and distributions, illiquidity, withdrawals, taxes and currency. Results are only as good as the assumptions; this is a planning tool, not a forecast.</p>
+    <p class="foot">Not modelled: fees beyond net-of-fee private returns, private equity capital calls and distributions, illiquidity, withdrawals other than the optional annual distribution, taxes and currency. Results are only as good as the assumptions; this is a planning tool, not a forecast.</p>
   </section>
 </main>
 

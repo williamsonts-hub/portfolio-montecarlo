@@ -20,6 +20,7 @@
       distribution: DEFAULTS.distribution, df: DEFAULTS.df, tailMonths: DEFAULTS.tailMonths,
       rebalance: DEFAULTS.rebalance, horizons: DEFAULTS.horizons.slice(),
       paths: DEFAULTS.paths, seed: DEFAULTS.seed,
+      payoutOn: false, payoutRate: 0.025,   // annual distribution, share of current value
       ddBasis: 'nominal', fanBasis: 'real',
     };
   }
@@ -43,6 +44,7 @@
       objectiveSpread: state.objectiveSpread,
       distribution: state.distribution, df: state.df, tailMonths: state.tailMonths,
       rebalance: state.rebalance,
+      payoutRate: state.payoutOn ? state.payoutRate : 0,
       horizons: state.horizons.slice().sort((a, b) => a - b),
       paths: state.paths, seed: state.seed,
     };
@@ -145,6 +147,7 @@
   function afterSettingChange() {
     $('hdrSpread').textContent = (state.objectiveSpread * 100).toFixed(1);
     document.querySelectorAll('.fat-only').forEach(el => el.classList.toggle('hide', state.distribution !== 'fat'));
+    document.querySelectorAll('.payout-only').forEach(el => el.classList.toggle('hide', !state.payoutOn));
   }
   function renderSettings() {
     bindField('cpiMean', () => state.cpi.mean, v => (state.cpi.mean = v), { pctUnit: true });
@@ -154,6 +157,9 @@
     bindField('spread', () => state.objectiveSpread, v => (state.objectiveSpread = v), { pctUnit: true });
     bindField('df', () => state.df, v => (state.df = v));
     bindField('tailMonths', () => state.tailMonths, v => (state.tailMonths = Math.round(v)));
+    bindField('payoutRate', () => state.payoutRate, v => (state.payoutRate = v), { pctUnit: true });
+    $('payoutOn').checked = !!state.payoutOn;
+    $('payoutOn').addEventListener('change', e => { state.payoutOn = e.target.checked; persist(); afterSettingChange(); });
     bindField('paths', () => state.paths, v => (state.paths = Math.round(v)));
     bindField('seed', () => state.seed, v => (state.seed = Math.round(v)));
     document.querySelectorAll('input[name="dist"]').forEach(r => {
@@ -245,7 +251,7 @@
     $('tiles').innerHTML = s.map(h => `
       <div class="tile"><div class="k">Beats CPI + ${(cfg.objectiveSpread * 100).toFixed(1)}% over ${h.years} yrs</div>
       <div class="v">${pct(h.probBeat, 0)}</div>
-      <div class="s">Median ${pct(h.nominal.p50)} nominal, ${pct(h.real.p50)} real p.a.</div></div>`).join('');
+      <div class="s">Median ${pct(h.nominal.p50)} nominal, ${pct(h.real.p50)} real p.a.${cfg.payoutRate ? ` after ${pct(cfg.payoutRate)} distributions` : ''}</div></div>`).join('');
     // summary table
     const rows = [
       ['Probability of beating objective', h => pct(h.probBeat, 0)],
@@ -256,6 +262,10 @@
       ['Return vs objective: median', h => pct(h.excess.p50)],
       ['Probability of a real loss', h => pct(h.probRealLoss, 0)],
       ['Median annual CPI', h => pct(h.cpi.p50)],
+      ...(cfg.payoutRate ? [
+        ['Total distributions paid: median (nominal, start = 1)', h => h.paid.nominalP50.toFixed(2)],
+        ['Total distributions paid: median (real, start = 1)', h => h.paid.realP50.toFixed(2)],
+      ] : []),
       ['Max drawdown: median', h => pct(-h.mdd.p50, 0)],
       ['Max drawdown: 1-in-20 worst', h => pct(-h.mdd.p95, 0)],
       ['Time to recover: median', h => yrs(h.recovery.p50Months)],
@@ -389,7 +399,7 @@
     compare.push({
       name,
       weights: cfg.weights.map(w => w * 100),
-      settings: `${cfg.distribution === 'fat' ? `Fat tails (df ${cfg.df})` : 'Lognormal'}, ${cfg.rebalance === 'none' ? 'no rebalancing' : cfg.rebalance + ' rebalancing'}`,
+      settings: `${cfg.distribution === 'fat' ? `Fat tails (df ${cfg.df})` : 'Lognormal'}, ${cfg.rebalance === 'none' ? 'no rebalancing' : cfg.rebalance + ' rebalancing'}${cfg.payoutRate ? `, ${pct(cfg.payoutRate)} annual distribution` : ''}`,
       spread: cfg.objectiveSpread,
       basis: state.ddBasis,
       summary: lastRun.summary,
@@ -434,7 +444,7 @@
   }
   function rerenderInputs() {
     // rebuild input bindings by replacing nodes (simplest way to drop old listeners)
-    ['cpiMean', 'cpiVol', 'cpiPers', 'cpiStart', 'spread', 'df', 'tailMonths', 'paths', 'seed', 'rebalance', 'horizons', 'ddBasis', 'fanBasis'].forEach(id => {
+    ['cpiMean', 'cpiVol', 'cpiPers', 'cpiStart', 'spread', 'df', 'tailMonths', 'payoutOn', 'payoutRate', 'paths', 'seed', 'rebalance', 'horizons', 'ddBasis', 'fanBasis'].forEach(id => {
       const el = $(id), c = el.cloneNode(true); el.replaceWith(c);
     });
     document.querySelectorAll('input[name="dist"]').forEach(el => el.replaceWith(el.cloneNode(true)));

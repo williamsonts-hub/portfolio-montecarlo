@@ -8,6 +8,7 @@ This is a browser-based tool for testing starting asset allocations against an o
 - **Assumptions:** edit every one of them. That covers each asset's expected return and volatility, and the full correlation matrix, which includes inflation. It also covers US CPI: mean, volatility, persistence and starting level. Finally, you can change the objective spread.
 - **Return distribution:** choose **lognormal** returns or **fat tails** (multivariate Student-t, with adjustable degrees of freedom and tail event length).
 - **Rebalancing:** choose none (buy and hold), monthly, quarterly or annual.
+- **Annual distribution (optional):** pay out a percentage of the portfolio's current value at each year end (default 2.5%, off by default). When it is on, returns, the objective test, drawdowns and the fan chart all use the value left after distributions, and the summary shows the total paid out.
 - **Results at 5, 10 and 20 years** (the horizons are editable):
   - how often the portfolio beats CPI + 4%, both at each horizon and year by year;
   - the spread of annualised nominal and real returns;
